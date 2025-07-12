@@ -26,6 +26,7 @@ local function startFarmingProcess(character)
     end)
 
     humanoid.Died:Connect(function()
+        task.wait(12)
         local newCharacter = player.CharacterAdded:Wait()
         startFarmingProcess(newCharacter)
     end)
