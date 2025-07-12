@@ -4,61 +4,87 @@ local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local humanoid = character:WaitForChild("Humanoid")
-local rootPart = character:WaitForChild("HumanoidRootPart")
-
-local grillTop = workspace:WaitForChild("Commercial Grill"):WaitForChild("Grill Cooking Top")
-
+local farmPosition = Vector3.new(-154, 14, 575)
 local buyToolRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("BuyTool")
 local spatulaTemplate = ReplicatedStorage:WaitForChild("Tools"):WaitForChild("Spatula")
 
-local function tweenTo(targetPosition, lookAtPosition)
-    local goalCFrame = CFrame.new(targetPosition, lookAtPosition)
-    local tweenInfo = TweenInfo.new(2.5, Enum.EasingStyle.Linear)
-    local tween = TweenService:Create(rootPart, tweenInfo, {CFrame = goalCFrame})
-    tween:Play()
-    tween.Completed:Wait()
-end
+local farmingConnection = nil
 
-local function hasSpatula()
-    return player.Backpack:FindFirstChild("Spatula") or character:FindFirstChild("Spatula")
-end
-
-if grillTop then
-    local grillCFrame = grillTop.CFrame
-    local targetPosition = grillCFrame.Position + (grillCFrame.LookVector * 5)
-    tweenTo(targetPosition, grillCFrame.Position)
-end
-
-if not hasSpatula() then
-    buyToolRemote:FireServer(5, spatulaTemplate)
-    player.Backpack:WaitForChild("Spatula", 10)
-end
-
-local spatulaTool = player.Backpack:FindFirstChild("Spatula")
-if spatulaTool then
-    humanoid:EquipTool(spatulaTool)
-end
-
-local equippedSpatula = character:WaitForChild("Spatula", 10)
-if not equippedSpatula then
-    return
-end
-
-local pattyPrompts = {}
-for _, descendant in ipairs(workspace:GetDescendants()) do
-    if descendant:IsA("ProximityPrompt") and descendant.ObjectText == "Patty" then
-        table.insert(pattyPrompts, descendant)
+local function startFarmingProcess(character)
+    if farmingConnection then
+        farmingConnection:Disconnect()
+        farmingConnection = nil
     end
-end
 
-RunService.Heartbeat:Connect(function()
-    if not character:FindFirstChild("Spatula") then
+    local humanoid = character:WaitForChild("Humanoid")
+    local rootPart = character:WaitForChild("HumanoidRootPart")
+
+    humanoid.Seated:Connect(function(isSeated)
+        if isSeated then
+            humanoid.Sit = false
+        end
+    end)
+
+    humanoid.Died:Connect(function()
+        local newCharacter = player.CharacterAdded:Wait()
+        startFarmingProcess(newCharacter)
+    end)
+
+    local function tweenTo(targetPosition, lookAtPosition)
+        if not rootPart or not rootPart.Parent then return end
+        local goalCFrame = CFrame.new(targetPosition, lookAtPosition)
+        local tweenInfo = TweenInfo.new(2.5, Enum.EasingStyle.Linear)
+        local tween = TweenService:Create(rootPart, tweenInfo, { CFrame = goalCFrame })
+        tween:Play()
+        tween.Completed:Wait()
+    end
+
+    local function hasSpatula()
+        return player.Backpack:FindFirstChild("Spatula") or character:FindFirstChild("Spatula")
+    end
+
+    tweenTo(farmPosition, farmPosition - Vector3.new(0, 0, 1))
+
+    if not hasSpatula() then
+        buyToolRemote:FireServer(5, spatulaTemplate)
+        player.Backpack:WaitForChild("Spatula", 10)
+    end
+
+    local spatulaTool = player.Backpack:FindFirstChild("Spatula")
+    if spatulaTool then
+        humanoid:EquipTool(spatulaTool)
+    end
+
+    local equippedSpatula = character:WaitForChild("Spatula", 10)
+    if not equippedSpatula then
         return
     end
 
-    for _, prompt in ipairs(pattyPrompts) do
-        fireproximityprompt(prompt)
+    local pattyPrompts = {}
+    for _, descendant in ipairs(workspace:GetDescendants()) do
+        if descendant:IsA("ProximityPrompt") and descendant.ObjectText == "Patty" then
+            table.insert(pattyPrompts, descendant)
+        end
     end
-end)
+
+    farmingConnection = RunService.Heartbeat:Connect(function()
+        if not character or not character.Parent or not character:FindFirstChild("Humanoid") or character:FindFirstChild("Humanoid").Health <= 0 then
+            if farmingConnection then
+                farmingConnection:Disconnect()
+                farmingConnection = nil
+            end
+            return
+        end
+        
+        if not character:FindFirstChild("Spatula") then
+            return
+        end
+
+        for _, prompt in ipairs(pattyPrompts) do
+            fireproximityprompt(prompt)
+        end
+    end)
+end
+
+local currentCharacter = player.Character or player.CharacterAdded:Wait()
+startFarmingProcess(currentCharacter)
